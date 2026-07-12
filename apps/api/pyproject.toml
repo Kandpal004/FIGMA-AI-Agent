@@ -1,0 +1,25 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "FastAPI application for the Ecommerce AI Design Director."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "orchestration",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
+    "redis>=5.0.0",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+orchestration = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api"]

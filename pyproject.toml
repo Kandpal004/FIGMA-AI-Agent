@@ -1,0 +1,99 @@
+[project]
+name = "ecommerce-ai-design-director"
+version = "0.1.0"
+description = "Enterprise multi-agent system for creating world-class Shopify Plus and Adobe Commerce ecommerce experiences."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Vasansi" }]
+
+# The root is a virtual workspace project. It carries no runtime code itself;
+# runtime code lives in the workspace members under packages/* and apps/*.
+dependencies = [
+    "core",
+    "orchestration",
+    "api",
+]
+
+[dependency-groups]
+# Shared dev tooling for the whole workspace. Installed with `uv sync`.
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",
+    "anyio>=4.4.0",
+]
+
+# ---------------------------------------------------------------------------
+# uv workspace: a single lockfile spanning every local package.
+# Adding a new package = create packages/<name>/pyproject.toml and it is
+# picked up automatically by the glob below.
+# ---------------------------------------------------------------------------
+[tool.uv.workspace]
+members = ["packages/*", "apps/api"]
+
+[tool.uv.sources]
+core = { workspace = true }
+orchestration = { workspace = true }
+api = { workspace = true }
+
+# ---------------------------------------------------------------------------
+# Ruff — lint + format for the whole tree.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["packages", "apps"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "ASYNC", # flake8-async
+    "S",   # flake8-bandit (security)
+    "C4",  # comprehensions
+    "PTH", # use pathlib
+    "RUF", # ruff-specific
+]
+ignore = [
+    "S101",  # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "N802"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "orchestration", "api"]
+
+# ---------------------------------------------------------------------------
+# mypy — strict typing across the workspace.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+mypy_path = ["packages/core/src", "packages/orchestration/src", "apps/api/src"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["packages", "apps"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
