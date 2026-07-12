@@ -1,17 +1,23 @@
 # Architecture Overview
 
 > Phase 1 — Architecture Foundation. This document is the map. Read it first.
+> Then read the binding [Engineering Principles](PRINCIPLES.md) — the constitution
+> every decision here answers to.
 
 ## What we are building
 
-An **enterprise multi-agent system** that produces world-class Shopify Plus and
-Adobe Commerce (Magento) storefront designs. Twenty specialist agents — Research,
-UX, UI, Creative Director, Accessibility, Performance, and the rest — collaborate
-through a **persisted, auditable workflow** in which the **Creative Director holds
-final veto authority** over every design section.
+An **AI Operating System for Ecommerce Design** — a commercial SaaS platform that
+produces world-class Shopify Plus and Adobe Commerce (Magento) storefront designs.
+Twenty specialist agents — Research, UX, UI, Creative Director, Accessibility,
+Performance, and the rest — collaborate through a **persisted, auditable workflow**
+in which the **Creative Director holds final veto authority** over every design
+section.
 
-This is not a chatbot and not a single agent. It is a coordinated fleet driven by
-an explicit state machine.
+This is **not** a Figma tool — Figma is one output adapter among several (HTML,
+React, Shopify theme, Magento theme). It is not a chatbot and not a single agent.
+It is a coordinated fleet driven by an explicit state machine, architected so that
+the fast-moving edges (prompts, knowledge, tools, output targets) never force a
+change in the stable core.
 
 ## The three invariants
 

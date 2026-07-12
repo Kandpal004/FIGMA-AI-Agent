@@ -1,8 +1,10 @@
 # Ecommerce AI Design Director
 
-> An enterprise **multi-agent system** for creating world-class **Shopify Plus** and **Adobe Commerce (Magento)** ecommerce experiences — from research and strategy through UX, UI, design-system validation, accessibility, performance, and a Creative-Director approval gate.
+> An **AI Operating System for Ecommerce Design** — a commercial SaaS platform for creating world-class **Shopify Plus** and **Adobe Commerce (Magento)** experiences, from research and strategy through UX, UI, design-system validation, accessibility, performance, and a Creative-Director approval gate.
 
-This is not a chatbot and not a single agent. It is a coordinated fleet of specialist agents driven by a **persisted, auditable workflow state machine**, with a **Creative Director** holding final veto authority over every design section.
+This is **not** a Figma tool — Figma is one output adapter among several (HTML, React, Shopify theme, Magento theme). It is not a chatbot and not a single agent. It is a coordinated fleet of specialist agents driven by a **persisted, auditable workflow state machine**, with a **Creative Director** holding final veto authority over every design section.
+
+The repository is governed by a permanent [**Engineering Principles constitution**](docs/architecture/PRINCIPLES.md) — 14 binding rules every future decision answers to. Read it before contributing.
 
 ---
 
