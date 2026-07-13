@@ -13,6 +13,7 @@ dependencies = [
     "core",
     "orchestration",
     "director",
+    "knowledge",
     "api",
 ]
 
@@ -40,6 +41,7 @@ members = ["packages/*", "apps/api"]
 core = { workspace = true }
 orchestration = { workspace = true }
 director = { workspace = true }
+knowledge = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
@@ -98,4 +100,5 @@ disallow_untyped_defs = false
 asyncio_mode = "auto"
 testpaths = ["packages", "apps"]
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers"
+# importlib mode lets same-named test modules coexist across packages.
+addopts = "-ra --strict-markers --import-mode=importlib"
