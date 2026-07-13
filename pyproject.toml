@@ -14,6 +14,7 @@ dependencies = [
     "orchestration",
     "director",
     "knowledge",
+    "reasoning",
     "api",
 ]
 
@@ -42,6 +43,7 @@ core = { workspace = true }
 orchestration = { workspace = true }
 director = { workspace = true }
 knowledge = { workspace = true }
+reasoning = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,23 @@
+[project]
+name = "reasoning"
+version = "0.1.0"
+description = "The Reasoning Engine — transforms intent into a cited, deterministic design strategy before any design."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "knowledge",
+    "director",
+    "sqlalchemy[asyncio]>=2.0.30",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+knowledge = { workspace = true }
+director = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reasoning"]
