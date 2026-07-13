@@ -12,6 +12,7 @@ authors = [{ name = "Vasansi" }]
 dependencies = [
     "core",
     "orchestration",
+    "director",
     "api",
 ]
 
@@ -38,6 +39,7 @@ members = ["packages/*", "apps/api"]
 [tool.uv.sources]
 core = { workspace = true }
 orchestration = { workspace = true }
+director = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
