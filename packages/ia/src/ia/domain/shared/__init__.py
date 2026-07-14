@@ -1,0 +1,1 @@
+"""ia.domain.shared package."""
