@@ -59,6 +59,7 @@ brand = { workspace = true }
 psychology = { workspace = true }
 ux = { workspace = true }
 ia = { workspace = true }
+wireframe = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
