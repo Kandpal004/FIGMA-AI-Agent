@@ -1,0 +1,1 @@
+"""wireframe.domain.shared package."""
