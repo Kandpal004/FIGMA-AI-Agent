@@ -19,6 +19,7 @@ dependencies = [
     "research",
     "strategy",
     "brand",
+    "psychology",
     "api",
 ]
 
@@ -52,6 +53,7 @@ competitive = { workspace = true }
 research = { workspace = true }
 strategy = { workspace = true }
 brand = { workspace = true }
+psychology = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
