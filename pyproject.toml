@@ -20,6 +20,7 @@ dependencies = [
     "strategy",
     "brand",
     "psychology",
+    "ux",
     "api",
 ]
 
@@ -54,6 +55,7 @@ research = { workspace = true }
 strategy = { workspace = true }
 brand = { workspace = true }
 psychology = { workspace = true }
+ux = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------

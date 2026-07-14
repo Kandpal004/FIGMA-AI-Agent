@@ -1,0 +1,1 @@
+"""ux.domain.goals package."""
