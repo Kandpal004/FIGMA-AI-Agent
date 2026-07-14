@@ -24,6 +24,7 @@ dependencies = [
     "ia",
     "wireframe",
     "creative-director",
+    "design-language",
     "api",
 ]
 
@@ -62,6 +63,7 @@ ux = { workspace = true }
 ia = { workspace = true }
 wireframe = { workspace = true }
 creative-director = { workspace = true }
+design-language = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
