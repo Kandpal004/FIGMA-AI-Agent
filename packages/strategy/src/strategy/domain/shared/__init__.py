@@ -1,0 +1,1 @@
+"""strategy.domain.shared package."""

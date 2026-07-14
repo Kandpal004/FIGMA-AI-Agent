@@ -1,0 +1,1 @@
+"""strategy.infrastructure.adapters package."""
