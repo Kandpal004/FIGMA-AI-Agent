@@ -1,0 +1,1 @@
+"""brand.domain.shared package."""

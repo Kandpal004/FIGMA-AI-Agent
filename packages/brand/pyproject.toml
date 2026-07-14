@@ -1,0 +1,23 @@
+[project]
+name = "brand"
+version = "0.1.0"
+description = "The Brand Strategy Engine — turns business strategy into a cited, structured brand system that governs every design decision."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "knowledge",
+    "strategy",
+    "sqlalchemy[asyncio]>=2.0.30",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+knowledge = { workspace = true }
+strategy = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/brand"]

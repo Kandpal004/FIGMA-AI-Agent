@@ -1,0 +1,1 @@
+"""brand.domain.quality package."""

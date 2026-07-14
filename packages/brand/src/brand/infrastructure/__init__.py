@@ -1,0 +1,1 @@
+"""brand.infrastructure package."""
