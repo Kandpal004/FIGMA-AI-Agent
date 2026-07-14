@@ -16,6 +16,7 @@ dependencies = [
     "knowledge",
     "reasoning",
     "competitive",
+    "research",
     "api",
 ]
 
@@ -46,6 +47,7 @@ director = { workspace = true }
 knowledge = { workspace = true }
 reasoning = { workspace = true }
 competitive = { workspace = true }
+research = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------

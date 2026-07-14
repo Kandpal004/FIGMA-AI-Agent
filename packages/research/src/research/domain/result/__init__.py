@@ -1,0 +1,1 @@
+"""research.domain.result package."""
