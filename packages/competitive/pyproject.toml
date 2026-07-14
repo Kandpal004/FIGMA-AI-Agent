@@ -1,0 +1,23 @@
+[project]
+name = "competitive"
+version = "0.1.0"
+description = "The Competitor Intelligence Engine — turns competitor observations into cited, structured business knowledge."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "knowledge",
+    "reasoning",
+    "sqlalchemy[asyncio]>=2.0.30",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+knowledge = { workspace = true }
+reasoning = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/competitive"]
