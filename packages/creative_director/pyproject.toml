@@ -1,0 +1,33 @@
+[project]
+name = "creative-director"
+version = "0.1.0"
+description = "The Creative Director Engine — a deterministic review-and-approval system that reviews every design decision across sixteen dimensions and holds final veto authority."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "knowledge",
+    "strategy",
+    "brand",
+    "psychology",
+    "ux",
+    "ia",
+    "wireframe",
+    "sqlalchemy[asyncio]>=2.0.30",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+knowledge = { workspace = true }
+strategy = { workspace = true }
+brand = { workspace = true }
+psychology = { workspace = true }
+ux = { workspace = true }
+ia = { workspace = true }
+wireframe = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/creative_director"]

@@ -23,6 +23,7 @@ dependencies = [
     "ux",
     "ia",
     "wireframe",
+    "creative-director",
     "api",
 ]
 
@@ -60,6 +61,7 @@ psychology = { workspace = true }
 ux = { workspace = true }
 ia = { workspace = true }
 wireframe = { workspace = true }
+creative-director = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
