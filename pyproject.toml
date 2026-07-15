@@ -27,6 +27,7 @@ dependencies = [
     "design-language",
     "component-intelligence",
     "design-system",
+    "design-orchestrator",
     "api",
 ]
 
@@ -68,6 +69,7 @@ creative-director = { workspace = true }
 design-language = { workspace = true }
 component-intelligence = { workspace = true }
 design-system = { workspace = true }
+design-orchestrator = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
