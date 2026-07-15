@@ -28,6 +28,7 @@ dependencies = [
     "component-intelligence",
     "design-system",
     "design-orchestrator",
+    "figma-design",
     "api",
 ]
 
@@ -70,6 +71,7 @@ design-language = { workspace = true }
 component-intelligence = { workspace = true }
 design-system = { workspace = true }
 design-orchestrator = { workspace = true }
+figma-design = { workspace = true }
 api = { workspace = true }
 
 # ---------------------------------------------------------------------------
