@@ -1,4 +1,4 @@
-"""Tests for the Homepage workflow definition and catalog (pure config)."""
+"""Tests for the per-section Homepage workflow definition and catalog (pure config)."""
 
 from __future__ import annotations
 
@@ -6,58 +6,52 @@ from core.contracts.agent import AgentRole
 
 from director.domain.shared.value_objects import PageType, WorkflowType
 from homepage_workflow import definition as wf
+from homepage_workflow.section_plan import HOMEPAGE_SECTIONS
 
 
-def test_definition_is_the_v1_pipeline_in_order():
+def test_definition_starts_with_validate_and_runs_strategy_once():
     d = wf.build_homepage_definition()
     assert d.workflow_type is WorkflowType.PAGE
     assert d.page_type is PageType.HOMEPAGE
-    assert d.step_keys() == (
-        wf.STEP_RESEARCH,
-        wf.STEP_COMPETITOR_ANALYSIS,
-        wf.STEP_BUSINESS_STRATEGY,
-        wf.STEP_BRAND_STRATEGY,
-        wf.STEP_CUSTOMER_PSYCHOLOGY,
-        wf.STEP_UX_STRATEGY,
-        wf.STEP_INFORMATION_ARCHITECTURE,
-        wf.STEP_WIREFRAME_PLANNING,
-        wf.STEP_CD_REVIEW,
-        wf.STEP_DESIGN_LANGUAGE,
-        wf.STEP_COMPONENT_INTELLIGENCE,
-        wf.STEP_DESIGN_SYSTEM_MAPPING,
-        wf.STEP_FIGMA_GENERATION,
-        wf.STEP_DESIGN_CRITIQUE,
-        wf.STEP_SELF_IMPROVEMENT,
-        wf.STEP_FINAL_APPROVAL,
-    )
+    assert d.first_step.key == wf.STEP_VALIDATE_INPUTS
+    # the strategy pipeline appears exactly once (page-level), before section work
+    keys = d.step_keys()
+    assert keys.index(wf.STEP_RESEARCH) < keys.index(wf.STEP_GENERATE_HOMEPAGE_PLAN)
+    assert keys.count(wf.STEP_RESEARCH) == 1
+    assert keys.count(wf.STEP_DESIGN_SYSTEM_MAPPING) == 1
 
 
-def test_the_two_gates_rewind_correctly():
+def test_one_generate_and_approve_gate_per_section():
     d = wf.build_homepage_definition()
-    gate_keys = {g.key for g in d.gates()}
-    assert gate_keys == {wf.STEP_CD_REVIEW, wf.STEP_FINAL_APPROVAL}
-    # the wireframe review rewinds to UX; the final approval rewinds to self-improvement
-    assert d.resolve_rollback(wf.STEP_CD_REVIEW).key == wf.STEP_UX_STRATEGY
-    assert d.resolve_rollback(wf.STEP_FINAL_APPROVAL).key == wf.STEP_SELF_IMPROVEMENT
+    gen = [s.key for s in d.steps if wf.is_generate_step(s.key)]
+    app = [s.key for s in d.steps if wf.is_approve_step(s.key)]
+    assert len(gen) == 14 and len(app) == 14
+    # in taxonomy order, generate immediately precedes its approve gate
+    for spec in HOMEPAGE_SECTIONS:
+        g, a = wf.generate_step_key(spec.key), wf.approve_step_key(spec.key)
+        assert d.next_step(g).key == a
+        # the approve gate rewinds ONLY to its own generate — approved sections are never touched
+        assert d.resolve_rollback(a).key == g
 
 
-def test_final_approval_is_a_manual_gate():
+def test_section_approve_gates_are_automatic_and_final_is_manual():
     d = wf.build_homepage_definition()
+    hero_gate = d.get_step(wf.approve_step_key("hero"))
+    assert hero_gate.is_gate and not hero_gate.approval.requires_human  # score-gated, automatic
     final = d.get_step(wf.STEP_FINAL_APPROVAL)
-    assert final.is_gate and final.approval.requires_human
-    cd = d.get_step(wf.STEP_CD_REVIEW)
-    assert cd.is_gate and not cd.approval.requires_human  # automatic
+    assert final.is_gate and final.approval.requires_human  # human sign-off
+    assert d.resolve_rollback(final.key).key == wf.STEP_FINALIZE
 
 
-def test_review_steps_use_the_creative_director_role():
+def test_creative_director_review_gate_rewinds_to_ux():
     d = wf.build_homepage_definition()
     assert d.get_step(wf.STEP_CD_REVIEW).agent_role is AgentRole.CREATIVE_DIRECTOR
-    assert d.get_step(wf.STEP_DESIGN_CRITIQUE).agent_role is AgentRole.CREATIVE_DIRECTOR
-    assert d.get_step(wf.STEP_FINAL_APPROVAL).agent_role is AgentRole.CREATIVE_DIRECTOR
+    assert d.resolve_rollback(wf.STEP_CD_REVIEW).key == wf.STEP_UX_STRATEGY
 
 
 def test_catalog_resolves_the_homepage_page_workflow():
     catalog = wf.build_homepage_catalog()
     resolved = catalog.for_page(PageType.HOMEPAGE)
     assert resolved.key == wf.HOMEPAGE_WORKFLOW_KEY
-    assert len(resolved) == 16
+    # validate + 12 strategy + generate_plan + 14x2 sections + finalize + final_approval
+    assert len(resolved) == 1 + 12 + 1 + 28 + 1 + 1 == 44

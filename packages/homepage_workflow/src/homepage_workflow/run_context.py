@@ -20,6 +20,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from homepage_workflow.request import HomepageRequest
+from homepage_workflow.section_plan import HomepageDesignPlan, SectionDesignPlan
+
 __all__ = ["HomepageBrief", "RunContext"]
 
 
@@ -114,9 +117,12 @@ class RunContext:
 
     brief: HomepageBrief
     knowledge_query: Any
+    request: HomepageRequest | None = None
+    homepage_plan: HomepageDesignPlan | None = None
     critique_notes: tuple[str, ...] = ()
     _facades: dict[str, Any] = field(default_factory=dict)
     _refs: dict[str, Any] = field(default_factory=dict)
+    _section_plans: dict[str, SectionDesignPlan] = field(default_factory=dict)
 
     def set_output(self, engine: str, facade: Any, ref: Any) -> None:
         """Record an engine's live facade and the id of the artifact it produced."""
@@ -152,3 +158,21 @@ class RunContext:
 
     def set_critique_notes(self, notes: Iterable[str]) -> None:
         self.critique_notes = tuple(n for n in notes if n and n.strip())
+
+    # -- section plans ----------------------------------------------------- #
+    def set_section_plan(self, plan: SectionDesignPlan) -> None:
+        """Record (or replace) the design plan for a section."""
+        self._section_plans[plan.section_key] = plan
+
+    def section_plan(self, section_key: str) -> SectionDesignPlan | None:
+        """The design plan for a section, or ``None`` if not generated yet."""
+        return self._section_plans.get(section_key)
+
+    def section_plans(self) -> tuple[SectionDesignPlan, ...]:
+        """Every section plan produced so far, ordered by section position."""
+        return tuple(sorted(self._section_plans.values(), key=lambda p: p.order))
+
+    @property
+    def approved_section_plans(self) -> tuple[SectionDesignPlan, ...]:
+        """Every approved section plan, ordered by section position."""
+        return tuple(p for p in self.section_plans() if p.is_approved)

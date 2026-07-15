@@ -32,7 +32,10 @@ from director.application.ports.agent_executor_port import (
 from director.domain.shared.ids import RunId
 
 from homepage_workflow import definition as wf
+from homepage_workflow.request import HomepageRequest
 from homepage_workflow.run_context import HomepageBrief, RunContext
+from homepage_workflow.section_plan import HOMEPAGE_SECTIONS, ApprovalStatus, HomepageDesignPlan
+from homepage_workflow.section_projection import meets_bar, project_section, score_section
 
 # --- Phase 6: Research ------------------------------------------------------ #
 from research.application.commands import Research
@@ -321,8 +324,25 @@ from figma_design.infrastructure.container import build_in_memory_environment as
 __all__ = ["EngineAgentExecutor"]
 
 
+_SECTION_BY_KEY = {s.key: s for s in HOMEPAGE_SECTIONS}
+_SECTION_ORDER = {s.key: i for i, s in enumerate(HOMEPAGE_SECTIONS, start=1)}
+
+
 def _ok(summary: str, **artifact: object) -> AgentExecutionResult:
     return AgentExecutionResult(status=ExecutionStatus.OK, summary=summary, artifact=artifact)
+
+
+def _is_grounded(component: str, *views: object) -> bool:
+    """Whether any engine view models the section's component."""
+    for view in views:
+        for item in getattr(view, "components", []) or []:
+            if isinstance(item, dict) and item.get("component") == component:
+                return True
+        for page in getattr(view, "pages", []) or []:
+            for section in page.get("sections", []) or []:
+                if section.get("component") == component:
+                    return True
+    return False
 
 
 def _industry_preset(industry: str) -> IndustryPreset:
@@ -350,13 +370,21 @@ class EngineAgentExecutor(AgentExecutorPort):
     # ================================================================== #
     async def execute(self, request: AgentExecutionRequest) -> AgentExecutionResult:
         context = self._context_for(request)
-        handler = self._HANDLERS.get(request.step_key)
-        if handler is None:
-            return AgentExecutionResult(
-                status=ExecutionStatus.FAILED,
-                error=f"No engine handler for step {request.step_key!r}.",
-            )
         try:
+            if wf.is_generate_step(request.step_key):
+                return await self._run_generate_section(
+                    context, wf.section_of_step(request.step_key), request
+                )
+            if wf.is_approve_step(request.step_key):
+                return await self._run_approve_section(
+                    context, wf.section_of_step(request.step_key), request
+                )
+            handler = self._HANDLERS.get(request.step_key)
+            if handler is None:
+                return AgentExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    error=f"No engine handler for step {request.step_key!r}.",
+                )
             return await handler(self, context, request)
         except Exception as exc:  # expected engine failures → retryable FAILED (not a raise)
             return AgentExecutionResult(
@@ -370,6 +398,7 @@ class EngineAgentExecutor(AgentExecutorPort):
         if context is None:
             brief = HomepageBrief.from_mapping(request.brief, str(request.run_id))
             context = RunContext(brief=brief, knowledge_query=self._knowledge)
+            context.request = HomepageRequest.from_brief(request.brief)
             self._contexts[request.run_id] = context
         return context
 
@@ -649,8 +678,24 @@ class EngineAgentExecutor(AgentExecutorPort):
         ctx.set_output("design_system", env.facade, DesignSystemSpecId.from_string(view.spec_id))
         return _ok("Design system mapped.", design_system_spec_id=view.spec_id)
 
-    async def _generate_figma(self, ctx: RunContext) -> str:
-        """Run the Orchestrator (P17) then Figma Design (P18); return the model id."""
+    async def _run_validate_inputs(self, ctx: RunContext, req: AgentExecutionRequest):
+        request = ctx.request or HomepageRequest.from_brief(req.brief)
+        ctx.request = request
+        validation = request.validate()
+        if not validation.is_valid:
+            return AgentExecutionResult(
+                status=ExecutionStatus.NEEDS_INPUT,
+                summary="Missing required inputs: " + ", ".join(validation.missing) + ".",
+                artifact={"missing": list(validation.missing), "warnings": list(validation.warnings)},
+            )
+        return _ok(
+            f"Inputs validated for {request.brand_name}.",
+            warnings=list(validation.warnings),
+            validation=validation.to_json(),
+        )
+
+    async def _run_generate_homepage_plan(self, ctx: RunContext, _req: AgentExecutionRequest):
+        """Run the Design Orchestrator (P17) to produce the machine-ready homepage backbone."""
         do_env = build_do(
             design_system=DODSIn(ctx.facade("design_system"), ctx.ref("design_system")),
             component_intelligence=DOCIIn(
@@ -680,93 +725,115 @@ class EngineAgentExecutor(AgentExecutorPort):
         ctx.set_output(
             "orchestrator", do_env.facade, DesignExecutionPlanId.from_string(do_view.plan_id)
         )
-
-        fig_env = build_figma(
-            design_orchestrator=FigDOIn(ctx.facade("orchestrator"), ctx.ref("orchestrator")),
-            design_system=FigDSIn(ctx.facade("design_system"), ctx.ref("design_system")),
-            component_intelligence=FigCIIn(
-                ctx.facade("component_intelligence"), ctx.ref("component_intelligence")
-            ),
-            design_language=FigDLIn(ctx.facade("design_language"), ctx.ref("design_language")),
-            creative_director=FigCDIn(ctx.facade("creative_director"), ctx.ref("creative_director")),
-            knowledge=FigKnowIn(ctx.knowledge_query),
-        )
-        fig_view = await fig_env.facade.compose(BuildFigmaDesign(request=FigmaDesignRequest(
-            brief=FigmaBrief(product_category=ctx.brief.product_category),
-            project=FigProject(
-                project_id=ctx.brief.project_id, platform=ctx.brief.platform, market=ctx.brief.market
-            ),
-            source_refs=FigSourceRefs(
-                execution_plan_id=ctx.ref_str("orchestrator"),
-                design_system_spec_id=ctx.ref_str("design_system"),
-                component_spec_id=ctx.ref_str("component_intelligence"),
-            ),
-        )))
-        ctx.set_output("figma", fig_env.facade, FigmaDesignModelId.from_string(fig_view.model_id))
-        return fig_view.model_id
-
-    async def _run_figma_generation(self, ctx: RunContext, _req: AgentExecutionRequest):
-        model_id = await self._generate_figma(ctx)
-        return _ok("Figma model generated.", figma_model_id=model_id)
-
-    async def _run_design_critique(self, ctx: RunContext, _req: AgentExecutionRequest):
-        env = self._build_cd_env(ctx)
-        subject = ReviewSubject(
-            kind=SubjectKind.FIGMA, reference=ctx.ref_str("figma"), label="Homepage Figma model"
-        )
-        view = await env.facade.review(BuildReview(request=ReviewRequest(
-            subject=subject,
-            policy=ReviewPolicy(profile=cd_profile_for(ReviewProfileKind.D2C), mode=CDMode.AUTOMATIC),
-            project=CDProject(
-                project_id=ctx.brief.project_id, platform=ctx.brief.platform, market=ctx.brief.market
-            ),
-        )))
-        notes = _improvement_notes(view.improvement_matrix)
-        ctx.set_critique_notes(notes)
         return _ok(
-            f"Design critiqued (score {view.quality.overall_score:.0f}); "
-            f"{len(notes)} improvement(s) identified.",
-            critique_review_id=view.review_id,
-            overall_score=view.quality.overall_score,
-            improvements=list(notes),
+            "Homepage plan backbone generated; ready to design sections one at a time.",
+            execution_plan_id=do_view.plan_id,
         )
 
-    async def _run_self_improvement(self, ctx: RunContext, _req: AgentExecutionRequest):
-        # Apply the critique by regenerating the Figma model with the upstream chain.
-        model_id = await self._generate_figma(ctx)
+    # ------------------------------------------------------------------ #
+    # Per-section generation & approval                                   #
+    # ------------------------------------------------------------------ #
+    async def _run_generate_section(
+        self, ctx: RunContext, section_key: str, req: AgentExecutionRequest
+    ) -> AgentExecutionResult:
+        spec = _SECTION_BY_KEY[section_key]
+        ds_view = await ctx.facade("design_system").get(ctx.ref("design_system"))
+        ci_view = await ctx.facade("component_intelligence").get(ctx.ref("component_intelligence"))
+        do_view = await ctx.facade("orchestrator").get(ctx.ref("orchestrator"))
+        grounded = _is_grounded(spec.component, ds_view, ci_view, do_view)
+        assert ctx.request is not None
+        plan = project_section(
+            spec,
+            ctx.request,
+            order=_SECTION_ORDER[section_key],
+            design_system_view=ds_view,
+            component_intelligence_view=ci_view,
+            orchestrator_view=do_view,
+            evidence_refs=(
+                ctx.ref_str("design_system"),
+                ctx.ref_str("component_intelligence"),
+                ctx.ref_str("orchestrator"),
+            ),
+            attempt=req.attempt,
+            notes=req.revision_notes,
+        )
+        ctx.set_section_plan(plan)
         return _ok(
-            f"Self-improvement applied {len(ctx.critique_notes)} critique note(s); "
-            "Figma model regenerated.",
-            figma_model_id=model_id,
-            applied_improvements=list(ctx.critique_notes),
+            f"Generated the {spec.title} plan (attempt {req.attempt}).",
+            section=section_key,
+            grounded=grounded,
+            plan=plan.to_json(),
+        )
+
+    async def _run_approve_section(
+        self, ctx: RunContext, section_key: str, req: AgentExecutionRequest
+    ) -> AgentExecutionResult:
+        plan = ctx.section_plan(section_key)
+        if plan is None:
+            return AgentExecutionResult(
+                status=ExecutionStatus.FAILED,
+                error=f"Section {section_key!r} was not generated before approval.",
+            )
+        generated = req.artifacts.get(wf.generate_step_key(section_key))
+        grounded = bool(generated.get("grounded", True)) if isinstance(generated, Mapping) else True
+        score, findings = score_section(plan, grounded=grounded)
+        if meets_bar(score):
+            ctx.set_section_plan(plan.with_review(score, ApprovalStatus.APPROVED))
+            return _ok(
+                f"Approved the {plan.title} (score {score:.0f}/100).",
+                section=section_key, review_score=score, approval_status="approved",
+            )
+        ctx.set_section_plan(plan.with_review(score, ApprovalStatus.IMPROVING))
+        return AgentExecutionResult(
+            status=ExecutionStatus.REJECTED,
+            summary=f"{plan.title} scored {score:.0f}/100 (< 95); improving only this section.",
+            revision_notes=findings,
+            artifact={"section": section_key, "review_score": score},
+        )
+
+    # ------------------------------------------------------------------ #
+    # Finalisation & sign-off                                             #
+    # ------------------------------------------------------------------ #
+    async def _run_finalize(self, ctx: RunContext, _req: AgentExecutionRequest):
+        sections = ctx.approved_section_plans or ctx.section_plans()
+        brand = ctx.request.brand_name if ctx.request else ctx.brief.brand_name
+        plan = HomepageDesignPlan(
+            brand_name=brand or "Storefront",
+            project_id=ctx.brief.project_id,
+            sections=sections,
+            source_refs={
+                "design_system": ctx.ref_str("design_system"),
+                "component_intelligence": ctx.ref_str("component_intelligence"),
+                "orchestrator": ctx.ref_str("orchestrator"),
+            },
+        )
+        ctx.homepage_plan = plan
+        return _ok(
+            f"Homepage plan finalised: {len(plan)} sections, overall {plan.overall_score:.0f}/100, "
+            f"ready_for_figma={plan.ready_for_figma}.",
+            section_count=len(plan),
+            overall_score=plan.overall_score,
+            ready_for_figma=plan.ready_for_figma,
         )
 
     async def _run_final_approval(self, ctx: RunContext, _req: AgentExecutionRequest):
-        env = self._build_cd_env(ctx)
-        subject = ReviewSubject(
-            kind=SubjectKind.FIGMA, reference=ctx.ref_str("figma"), label="Homepage — final design"
-        )
-        view = await env.facade.review(BuildReview(request=ReviewRequest(
-            subject=subject,
-            policy=ReviewPolicy(profile=cd_profile_for(ReviewProfileKind.D2C), mode=CDMode.AUTOMATIC),
-            project=CDProject(
-                project_id=ctx.brief.project_id, platform=ctx.brief.platform, market=ctx.brief.market
-            ),
-        )))
-        # A manual gate: produce the final assessment and pause for the human sign-off.
+        plan = ctx.homepage_plan
+        if plan is None:
+            return _ok("Awaiting a finalised homepage plan.")
+        # A manual gate: present the finished plan and pause for the human sign-off.
         return _ok(
-            f"Final design ready for approval (score {view.quality.overall_score:.0f}, "
-            f"{'recommended' if view.is_approved else 'changes suggested'}).",
-            final_review_id=view.review_id,
-            overall_score=view.quality.overall_score,
-            recommended=view.is_approved,
-            figma_model_id=ctx.ref_str("figma"),
+            f"Homepage design plan ready for approval: {len(plan)} sections, overall "
+            f"{plan.overall_score:.0f}/100, ready for Figma generation.",
+            section_count=len(plan),
+            overall_score=plan.overall_score,
+            ready_for_figma=plan.ready_for_figma,
         )
 
     # ================================================================== #
-    # Dispatch table
+    # Dispatch table (fixed steps; section steps are dispatched by prefix)
     # ================================================================== #
     _HANDLERS = {
+        wf.STEP_VALIDATE_INPUTS: _run_validate_inputs,
         wf.STEP_RESEARCH: _run_research,
         wf.STEP_COMPETITOR_ANALYSIS: _run_competitor,
         wf.STEP_BUSINESS_STRATEGY: _run_business_strategy,
@@ -779,9 +846,8 @@ class EngineAgentExecutor(AgentExecutorPort):
         wf.STEP_DESIGN_LANGUAGE: _run_design_language,
         wf.STEP_COMPONENT_INTELLIGENCE: _run_component_intelligence,
         wf.STEP_DESIGN_SYSTEM_MAPPING: _run_design_system,
-        wf.STEP_FIGMA_GENERATION: _run_figma_generation,
-        wf.STEP_DESIGN_CRITIQUE: _run_design_critique,
-        wf.STEP_SELF_IMPROVEMENT: _run_self_improvement,
+        wf.STEP_GENERATE_HOMEPAGE_PLAN: _run_generate_homepage_plan,
+        wf.STEP_FINALIZE: _run_finalize,
         wf.STEP_FINAL_APPROVAL: _run_final_approval,
     }
 

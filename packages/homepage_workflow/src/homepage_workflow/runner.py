@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 
 from director.application.director.commands import (
     ApproveStep,
+    ProvideInput,
     RejectStep,
     ResumeRun,
     SubmitPageDesign,
@@ -27,7 +28,8 @@ from director.domain.shared.value_objects import PageType, Priority
 from director.interfaces.dto import RunResultView, RunView
 
 from homepage_workflow.composition import HomepageEnvironment
-from homepage_workflow.definition import STEP_FINAL_APPROVAL
+from homepage_workflow.definition import STEP_FINAL_APPROVAL, STEP_VALIDATE_INPUTS
+from homepage_workflow.section_plan import HomepageDesignPlan, SectionDesignPlan
 
 __all__ = ["HomepageWorkflowRunner"]
 
@@ -66,6 +68,18 @@ class HomepageWorkflowRunner:
     async def resume(self, run_id: RunId) -> RunResultView:
         """Resume an interrupted run from its persisted state."""
         return await self._facade.resume(ResumeRun(run_id=run_id))
+
+    async def provide_inputs(
+        self,
+        run_id: RunId,
+        inputs: dict[str, object],
+        *,
+        step_key: str = STEP_VALIDATE_INPUTS,
+    ) -> RunResultView:
+        """Supply missing inputs to a run blocked at Validate Inputs, then continue."""
+        return await self._facade.provide_input(
+            ProvideInput(run_id=run_id, step_key=step_key, input=inputs)
+        )
 
     async def approve_final(
         self, run_id: RunId, *, approver: str = "creative_director", notes: tuple[str, ...] = ()
@@ -113,6 +127,21 @@ class HomepageWorkflowRunner:
         """The Director's stored reasoning (decision log) for the run — every dispatch, advance,
         approval, rejection, and rollback, in order."""
         return await self._facade.get_history(run_id)
+
+    def homepage_plan(self, run_id: RunId) -> HomepageDesignPlan | None:
+        """The finalised Homepage Design Plan for a run, or ``None`` if not finalised yet."""
+        context = self._env.executor._contexts.get(run_id)  # noqa: SLF001 - own package
+        return context.homepage_plan if context is not None else None
+
+    def section_plan(self, run_id: RunId, section_key: str) -> SectionDesignPlan | None:
+        """The design plan for one section of a run, or ``None`` if not generated yet."""
+        context = self._env.executor._contexts.get(run_id)  # noqa: SLF001 - own package
+        return context.section_plan(section_key) if context is not None else None
+
+    def section_plans(self, run_id: RunId) -> tuple[SectionDesignPlan, ...]:
+        """Every section plan produced so far for a run, ordered by section position."""
+        context = self._env.executor._contexts.get(run_id)  # noqa: SLF001 - own package
+        return context.section_plans() if context is not None else ()
 
     async def review_results(self, run_id: RunId) -> tuple[DecisionRecord, ...]:
         """The stored review results — the approve/reject decisions the gates produced."""

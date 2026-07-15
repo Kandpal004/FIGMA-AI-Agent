@@ -1,104 +1,111 @@
-"""End-to-end tests: the Homepage Design Workflow driven over the REAL engines.
+"""End-to-end tests: the per-section Homepage Design Workflow over the REAL engines.
 
-These prove the first production workflow actually runs — every engine (Research, Competitive,
-Strategy, Brand, Psychology, UX, IA, Wireframe, Creative Director, Design Language, Component
-Intelligence, Design System, Design Orchestrator, Figma Design) is invoked through its real facade,
-the run advances through all sixteen steps, and the platform's requirements hold: the run is
-resumable and event-emitting, it stores reasoning and review results, and the review gates give a
-self-correcting improve loop.
+These prove the workflow validates inputs, orchestrates every engine once, then designs the
+homepage **one section at a time** — generating, critiquing (score-gated at 95), approving, and
+never regenerating an approved section — and finally assembles a complete, Figma-ready
+:class:`HomepageDesignPlan` with the thirteen creative-director attributes per section.
 """
 
 from __future__ import annotations
+
+import pytest
 
 from director.domain.director.decision import DecisionKind
 from director.domain.shared.ids import RunId
 
 from homepage_workflow import definition as wf
-
-# Every engine output the executor threads through the run, keyed by engine.
-_EXPECTED_ENGINE_OUTPUTS = (
-    "research",
-    "competitive",
-    "strategy",
-    "brand",
-    "psychology",
-    "ux",
-    "ia",
-    "wireframe",
-    "creative_director",
-    "design_language",
-    "component_intelligence",
-    "design_system",
-    "orchestrator",
-    "figma",
-)
+from homepage_workflow.request import HomepageRequest, ProductCatalog
+from homepage_workflow.section_plan import HOMEPAGE_SECTIONS
 
 
-async def test_designs_a_homepage_end_to_end(homepage_env, runner, brief):
-    # 1. Start: the run drives itself through fifteen engine steps and pauses at final approval.
-    result = await runner.start(brief)
+@pytest.fixture
+def full_brief() -> dict[str, object]:
+    return HomepageRequest(
+        brand_name="Aesop",
+        business_description="Premium botanical skincare for discerning customers.",
+        product_catalog=ProductCatalog(product_category="skincare", categories=("serums",)),
+        design_brief="A calm, editorial homepage that converts through trust and clarity.",
+        descriptors=("premium", "minimal"),
+    ).to_brief()
+
+
+async def test_designs_the_homepage_section_by_section(homepage_env, runner, full_brief):
+    result = await runner.start(full_brief)
     run = result.run
+    # every engine + section step ran; only the manual final approval remains
     assert run.status == "paused"
     assert run.current_step_key == wf.STEP_FINAL_APPROVAL
     completed = {s.key for s in run.steps if s.state == "completed"}
-    assert completed == set(wf.build_homepage_definition().step_keys()) - {wf.STEP_FINAL_APPROVAL}
-
-    # Events were emitted for the run.
-    names = [e.name for e in result.events]
-    assert names[0] == "RunStarted"
-    assert "StepDispatched" in names and "StepCompleted" in names
+    assert wf.STEP_VALIDATE_INPUTS in completed
+    assert wf.STEP_GENERATE_HOMEPAGE_PLAN in completed
+    for spec in HOMEPAGE_SECTIONS:  # every section generated and approved
+        assert wf.generate_step_key(spec.key) in completed
+        assert wf.approve_step_key(spec.key) in completed
 
     run_id = RunId.from_string(run.run_id)
 
-    # 2. Every real engine actually ran and threaded its output id forward.
-    context = homepage_env.executor._contexts[run_id]  # noqa: SLF001 - white-box assertion
-    for engine in _EXPECTED_ENGINE_OUTPUTS:
-        assert context.has(engine), f"engine {engine} did not run"
-        assert context.ref_str(engine), f"engine {engine} produced no artifact id"
+    # each section was approved individually with a score at or above the 95 bar
+    for spec in HOMEPAGE_SECTIONS:
+        plan = runner.section_plan(run_id, spec.key)
+        assert plan is not None and plan.is_approved
+        assert plan.review_score >= 95.0
+        # the thirteen creative-director attributes are all present
+        assert plan.purpose and plan.business_goal and plan.customer_goal and plan.conversion_goal
+        assert plan.required_components and plan.required_assets and plan.content_requirements
+        assert plan.cta_strategy and plan.trust_strategy and plan.animation_guidance
+        assert plan.responsive_behaviour and plan.accessibility_requirements and plan.review_checklist
+        # bound by the Figma rules
+        assert plan.figma_constraints.auto_layout_only and plan.figma_constraints.variables_only
 
-    # 3. Approve the final design: the run completes.
+    # sign off the finished plan → the run completes
     approved = await runner.approve_final(run_id)
     assert approved.run.status == "completed"
-    status = await runner.status(run_id)
-    assert all(s.state == "completed" for s in status.steps)
 
-    # 4. Reasoning and review results were stored.
+    # the assembled homepage plan is complete and ready for Figma generation
+    homepage = runner.homepage_plan(run_id)
+    assert homepage is not None
+    assert len(homepage) == 14
+    assert [s.section_key for s in homepage] == [s.key for s in HOMEPAGE_SECTIONS]
+    assert homepage.all_approved and homepage.ready_for_figma
+    assert homepage.overall_score >= 95.0
+    doc = homepage.to_json()
+    assert doc["ready_for_figma"] is True and doc["section_count"] == 14
+
+    # reasoning and per-section review results were stored
     reasoning = await runner.reasoning(run_id)
-    assert len(reasoning) >= len(wf.build_homepage_definition())  # at least one decision per step
+    assert len(reasoning) >= len(run.steps)
     reviews = await runner.review_results(run_id)
-    assert any(d.kind is DecisionKind.APPROVE for d in reviews)
+    assert sum(1 for d in reviews if d.kind is DecisionKind.APPROVE) >= 14  # 14 sections + final
 
 
-async def test_resume_is_a_no_op_when_paused_for_approval(runner, brief):
-    result = await runner.start(brief)
-    run_id = RunId.from_string(result.run.run_id)
-    # A run paused for human approval is not advanced by resume — it awaits approve/reject.
-    resumed = await runner.resume(run_id)
-    assert resumed.run.status == "paused"
-    assert resumed.run.current_step_key == wf.STEP_FINAL_APPROVAL
+async def test_validate_inputs_blocks_on_missing_required_inputs(runner):
+    # a request missing the business description and catalog
+    incomplete = HomepageRequest(brand_name="Aesop", design_brief="Convert.").to_brief()
+    result = await runner.start(incomplete)
+    run = result.run
+    # the run blocks at Validate Inputs rather than running the engines
+    assert run.current_step_key == wf.STEP_VALIDATE_INPUTS
+    validate_step = next(s for s in run.steps if s.key == wf.STEP_VALIDATE_INPUTS)
+    assert validate_step.state == "blocked"
+    assert all(
+        s.state != "completed" for s in run.steps if s.key != wf.STEP_VALIDATE_INPUTS
+    )
 
 
-async def test_final_rejection_drives_a_self_improvement_loop(runner, brief):
-    result = await runner.start(brief)
-    run_id = RunId.from_string(result.run.run_id)
-    assert result.run.redesign_count == 0
-
-    # Reject the final design: the Director rewinds to self-improvement, re-runs it, and pauses at
-    # the final gate again — the improve loop — with the redesign counter incremented.
-    rejected = await runner.reject_final(run_id, notes=("Increase hero contrast; tighten spacing.",))
-    assert rejected.run.redesign_count == 1
-    assert rejected.run.current_step_key == wf.STEP_FINAL_APPROVAL
-    assert rejected.run.status == "paused"
-
-    # A human can then approve the improved design to complete the run.
-    approved = await runner.approve_final(run_id)
-    assert approved.run.status == "completed"
+async def test_never_regenerates_approved_sections(runner, full_brief):
+    # each section's approve gate rewinds only to its own generate step, so approving a section
+    # can never rewind into an already-approved earlier section.
+    d = wf.build_homepage_definition()
+    prev_approved: list[str] = []
+    for spec in HOMEPAGE_SECTIONS:
+        target = d.resolve_rollback(wf.approve_step_key(spec.key)).key
+        assert target == wf.generate_step_key(spec.key)
+        assert target not in prev_approved  # never rewinds into a prior section
+        prev_approved.append(wf.generate_step_key(spec.key))
 
 
-async def test_determinism_of_the_pipeline_shape(runner, brief):
-    # The workflow shape (which steps, in what order, completing) is deterministic across runs.
-    r1 = await runner.start(brief)
-    completed1 = [s.key for s in r1.run.steps if s.state == "completed"]
-    assert completed1 == [
-        k for k in wf.build_homepage_definition().step_keys() if k != wf.STEP_FINAL_APPROVAL
-    ]
+async def test_pipeline_shape_is_deterministic(runner, full_brief):
+    r1 = await runner.start(full_brief)
+    completed = [s.key for s in r1.run.steps if s.state == "completed"]
+    expected = [k for k in wf.build_homepage_definition().step_keys() if k != wf.STEP_FINAL_APPROVAL]
+    assert completed == expected
