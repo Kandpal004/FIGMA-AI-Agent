@@ -1,0 +1,50 @@
+[project]
+name = "homepage-workflow"
+version = "0.1.0"
+description = "The Homepage Design Workflow (Phase 19) — the first production workflow of the V1 AI Creative Director. Orchestrates every engine (Research → Competitor → Strategy → Brand → Psychology → UX → IA → Wireframe → Creative Director → Design Language → Components → Design System → Figma → Critique → Self-Improvement → Approval) through the Director, with resumability, retry, events, stored reasoning, and review gates."
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "director",
+    "knowledge",
+    "research",
+    "competitive",
+    "strategy",
+    "brand",
+    "psychology",
+    "ux",
+    "ia",
+    "wireframe",
+    "creative-director",
+    "design-language",
+    "component-intelligence",
+    "design-system",
+    "design-orchestrator",
+    "figma-design",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+director = { workspace = true }
+knowledge = { workspace = true }
+research = { workspace = true }
+competitive = { workspace = true }
+strategy = { workspace = true }
+brand = { workspace = true }
+psychology = { workspace = true }
+ux = { workspace = true }
+ia = { workspace = true }
+wireframe = { workspace = true }
+creative-director = { workspace = true }
+design-language = { workspace = true }
+component-intelligence = { workspace = true }
+design-system = { workspace = true }
+design-orchestrator = { workspace = true }
+figma-design = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/homepage_workflow"]
